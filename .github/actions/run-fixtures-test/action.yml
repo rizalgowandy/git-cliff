@@ -1,0 +1,54 @@
+name: Run a fixtures test
+description: Run a fixtures test
+
+inputs:
+  fixtures-dir:
+    description: Path to the fixtures directory
+    required: true
+  command:
+    description: The git-cliff command to run
+    required: false
+    default: ""
+  date-format:
+    description: The date format to use
+    required: false
+    default: "%Y-%m-%d"
+
+runs:
+  using: composite
+  steps:
+    - name: Install toolchain
+      uses: dtolnay/rust-toolchain@nightly
+
+    - name: Install git-cliff
+      run: cargo install --path git-cliff/ --profile dev
+      shell: bash
+
+    - name: Set git config
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      shell: bash
+
+    - name: Create commits and tags
+      working-directory: ${{ inputs.fixtures-dir }}
+      run: |
+        git init
+        ./commit.sh
+      shell: bash
+
+    - name: Generate a changelog
+      working-directory: ${{ inputs.fixtures-dir }}
+      run: git cliff --config cliff.toml ${{ inputs.command }} > output.md
+      shell: bash
+
+    - name: Compare the output with the expected output
+      working-directory: ${{ inputs.fixtures-dir }}
+      env:
+        IN_DATE_FORMAT: ${{ inputs.date-format }}
+      run: |
+        cat output.md
+        current_date=$(date +"$IN_DATE_FORMAT")
+        sed -i "s/<<DATE>>/$current_date/g" expected.md
+        diff --strip-trailing-cr output.md expected.md
+      shell: bash
